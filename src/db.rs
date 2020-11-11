@@ -2,7 +2,7 @@ use anyhow::Result;
 use log::{debug, error, info};
 use osmpbfreader::objects::{Node, Way};
 use osmpbfreader::{OsmObj, OsmPbfReader};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, Statement};
 use std::f64::consts::PI;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
@@ -143,31 +143,6 @@ impl Database {
                 .any(|v| v == "river" || v == "stream" || v == "canal")
     }
 
-    fn update_node(&self, node: &Node) -> Result<()> {
-        debug!("Updating node {:?}", node);
-        let quadkey = super::quadkey::Quadkey::new(node.lat(), node.lon(), 13);
-        self.conn.execute(
-            "INSERT OR REPLACE INTO nodes (id, lat, lon, quadkey) VALUES (?, ?, ?, ?)",
-            params![node.id.0, node.lat(), node.lon(), quadkey.to_string()],
-        )?;
-
-        Ok(())
-    }
-
-    fn update_way(&self, way: &Way) -> Result<()> {
-        debug!("Updating way {:?} {:?}", way.id, way.tags);
-
-        for node_pair in way.nodes.windows(2) {
-            debug!("Inserting link between {:?}", node_pair);
-            self.conn.execute(
-                "INSERT OR REPLACE INTO links (source, destination) VALUES (?, ?)",
-                params![node_pair[0].0, node_pair[1].0],
-            )?;
-        }
-
-        Ok(())
-    }
-
     fn load_osm_pbf<T>(&self, input: T) -> Result<()>
     where
         T: std::io::Read + std::io::Seek,
@@ -176,18 +151,40 @@ impl Database {
         let objs = pbf.get_objs_and_deps(|x| self.filter_object(x))?;
 
         info!("Updating database with {:?} objects...", objs.len());
+        self.conn.execute("BEGIN TRANSACTION", params![])?;
+        let mut node_stmt = self
+            .conn
+            .prepare("INSERT OR REPLACE INTO nodes (id, lat, lon, quadkey) VALUES (?, ?, ?, ?)")?;
+        let mut way_stmt = self
+            .conn
+            .prepare("INSERT OR REPLACE INTO links (source, destination) VALUES (?, ?)")?;
         let mut count = 0;
         for (_, obj) in &objs {
             match obj {
-                OsmObj::Node(node) => self.update_node(node)?,
-                OsmObj::Way(way) => self.update_way(way)?,
+                OsmObj::Node(node) => {
+                    let quadkey = super::quadkey::Quadkey::new(node.lat(), node.lon(), 13);
+                    node_stmt.execute(params![
+                        node.id.0,
+                        node.lat(),
+                        node.lon(),
+                        quadkey.to_string()
+                    ])?;
+                }
+                OsmObj::Way(way) => {
+                    for node_pair in way.nodes.windows(2) {
+                        way_stmt.execute(params![node_pair[0].0, node_pair[1].0])?;
+                    }
+                }
                 _ => (),
             }
+            count += 1;
             if count % 10000 == 0 {
                 info!("Updated {:?} objects so far", count);
+                self.conn.execute("COMMIT TRANSACTION", params![])?;
+                self.conn.execute("BEGIN TRANSACTION", params![])?;
             }
-            count += 1;
         }
+        self.conn.execute("COMMIT TRANSACTION", params![])?;
 
         Ok(())
     }
