@@ -100,7 +100,7 @@ async fn route(
     );
 
     if let Some((nodes, distance)) = result {
-        let linestring: Vec<(f64, f64)> = nodes.iter().map(|n| (n.lat, n.lon)).collect();
+        let linestring: Vec<(f64, f64)> = nodes.iter().map(|n| (n.lon, n.lat)).collect();
         let json = warp::reply::json(&RouteResult {
             linestring: linestring,
             distance: distance,
