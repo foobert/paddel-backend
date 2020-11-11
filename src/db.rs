@@ -184,7 +184,7 @@ impl Database {
     pub fn find_near(&self, lat: f64, lon: f64) -> Option<RouteNode> {
         match self.find_near_err(lat, lon) {
             Ok(node) => Some(node),
-            Err(err) => None,
+            Err(_) => None,
         }
     }
 

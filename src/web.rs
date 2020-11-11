@@ -1,10 +1,6 @@
-//mod db;
-//mod quadkey;
-use clap::{App, Arg, SubCommand};
 use log::info;
 use pathfinding::prelude::astar;
 use serde::{Deserialize, Serialize};
-//use serde_json::json;
 use std::convert::Infallible;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -27,16 +23,18 @@ pub async fn serve(database: Database) -> () {
     let dbpool = Arc::new(Mutex::new(database));
     let env = warp::any().map(move || dbpool.clone());
 
-    let hello = warp::get()
+    let route = warp::get()
         .and(warp::path("route"))
         .and(warp::query::<QueryParams>())
         .and(env.clone())
         .and_then(route);
 
-    let routes = hello.recover(handle_rejection);
+    let routes = route.recover(handle_rejection);
 
     let server = warp::serve(routes);
-    server.run(([127, 0, 0, 1], 8081)).await;
+    let s = server.run(([127, 0, 0, 1], 8081));
+    info!("Server listening on http://localhost:8081");
+    s.await;
 }
 
 /// An API error serializable to JSON.
@@ -82,7 +80,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
 async fn route(
     params: QueryParams,
     db_pool: DatabasePool,
-) -> std::result::Result<impl warp::Reply, warp::Rejection> {
+) -> std::result::Result<impl Reply, Rejection> {
     let database = db_pool.lock().await;
     let maybe_start = database.find_near(params.lat1 as f64, params.lon1 as f64);
     let maybe_goal = database.find_near(params.lat2 as f64, params.lon2 as f64);
