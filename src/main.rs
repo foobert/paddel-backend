@@ -4,15 +4,11 @@ mod web;
 use anyhow::Result;
 use clap::{App, Arg, SubCommand};
 use log::info;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use db::Database;
 
 #[macro_use]
 extern crate anyhow;
-
-pub type DatabasePool = Arc<Mutex<Database>>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
