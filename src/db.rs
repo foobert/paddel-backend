@@ -181,7 +181,14 @@ impl Database {
         Ok(())
     }
 
-    pub fn find_near(&self, lat: f64, lon: f64) -> Result<RouteNode> {
+    pub fn find_near(&self, lat: f64, lon: f64) -> Option<RouteNode> {
+        match self.find_near_err(lat, lon) {
+            Ok(node) => Some(node),
+            Err(err) => None,
+        }
+    }
+
+    fn find_near_err(&self, lat: f64, lon: f64) -> Result<RouteNode> {
         // compute quadkey, find all nodes near, sort by distance, pick first
         debug!("Looking for node near {:?} {:?}", lat, lon);
         let quadkey = super::quadkey::Quadkey::new(lat, lon, 12);
@@ -210,7 +217,7 @@ impl Database {
         });
         debug!("min node: {:?}", min_node);
 
-        return min_node.ok_or(anyhow!("Foo"));
+        return min_node.ok_or(anyhow!("No node near {:?} {:?}", lat, lon));
     }
 
     pub fn neighbours(&self, node: &RouteNode) -> Vec<(RouteNode, i32)> {

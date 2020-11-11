@@ -4,11 +4,13 @@ use anyhow::Result;
 use clap::{App, Arg, SubCommand};
 use log::info;
 use pathfinding::prelude::astar;
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
+//use serde_json::json;
+use std::convert::Infallible;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use warp::Filter;
+use warp::http::StatusCode;
+use warp::{reject, Filter, Rejection, Reply};
 
 use db::Database;
 
@@ -70,24 +72,69 @@ async fn main() -> Result<()> {
             .and(env.clone())
             .and_then(route);
 
-        let server = warp::serve(hello);
+        let routes = hello.recover(handle_rejection);
+
+        let server = warp::serve(routes);
         server.run(([127, 0, 0, 1], 8081)).await;
     }
 
     Ok(())
 }
 
+/// An API error serializable to JSON.
+#[derive(Serialize)]
+struct ErrorMessage {
+    code: u16,
+    message: String,
+}
+
+#[derive(Serialize)]
+struct RouteResult {
+    linestring: Vec<(f64, f64)>,
+    distance: i32,
+}
+
+#[derive(Debug)]
+struct NodeNotFound;
+
+impl reject::Reject for NodeNotFound {}
+
+async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
+    let code;
+    let message;
+
+    if err.is_not_found() {
+        code = StatusCode::NOT_FOUND;
+        message = "NOT_FOUND";
+    } else if let Some(NodeNotFound) = err.find() {
+        code = StatusCode::BAD_REQUEST;
+        message = "Node not found";
+    } else {
+        code = StatusCode::INTERNAL_SERVER_ERROR;
+        message = "UNHANDLED_REJECTION";
+    }
+
+    let json = warp::reply::json(&ErrorMessage {
+        code: code.as_u16(),
+        message: message.into(),
+    });
+    Ok(warp::reply::with_status(json, code))
+}
+
 async fn route(
     params: QueryParams,
-    dbPool: DatabasePool,
+    db_pool: DatabasePool,
 ) -> std::result::Result<impl warp::Reply, warp::Rejection> {
-    let database = dbPool.lock().await;
-    let start = database
-        .find_near(params.lat1 as f64, params.lon1 as f64)
-        .unwrap();
-    let goal = database
-        .find_near(params.lat2 as f64, params.lon2 as f64)
-        .unwrap();
+    let database = db_pool.lock().await;
+    let maybe_start = database.find_near(params.lat1 as f64, params.lon1 as f64);
+    let maybe_goal = database.find_near(params.lat2 as f64, params.lon2 as f64);
+
+    if maybe_start.is_none() || maybe_goal.is_none() {
+        return Err(reject::custom(NodeNotFound));
+    }
+
+    let start = maybe_start.unwrap();
+    let goal = maybe_goal.unwrap();
 
     let result = astar(
         &start,
@@ -98,17 +145,12 @@ async fn route(
 
     if let Some((nodes, distance)) = result {
         let linestring: Vec<(f64, f64)> = nodes.iter().map(|n| (n.lat, n.lon)).collect();
-        let foo = json!({
-            "linestring": linestring,
-            "distance": distance,
+        let json = warp::reply::json(&RouteResult {
+            linestring: linestring,
+            distance: distance,
         });
-        return Ok(foo.to_string());
+        Ok(warp::reply::with_status(json, StatusCode::OK))
     } else {
-        let linestring: Vec<(f64, f64)> = Vec::new();
-        let foo = json!({
-            "linestring": linestring,
-            "distance": 0
-        });
-        return Ok(foo.to_string());
+        return Err(reject());
     }
 }
