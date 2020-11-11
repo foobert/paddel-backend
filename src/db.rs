@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::{debug, info};
+use log::{debug, error, info};
 use osmpbfreader::objects::{Node, Way};
 use osmpbfreader::{OsmObj, OsmPbfReader};
 use rusqlite::{params, Connection};
@@ -84,26 +84,32 @@ impl Database {
     }
 
     fn fixup_quadkeys(&self) -> Result<()> {
+        info!("Fixing quadkeys...");
         let mut stmt = self
             .conn
             .prepare("SELECT id, lat, lon FROM nodes WHERE quadkey IS NULL")?;
         let nodes_iter = stmt.query_map(params![], |row| {
-            let id: String = row.get(0)?;
+            let id: i64 = row.get(0)?;
             let lat: f64 = row.get(1)?;
             let lon: f64 = row.get(2)?;
             let quadkey = super::quadkey::Quadkey::new(lat, lon, 13);
 
             Ok((id, quadkey))
         });
-
         let mut stmt2 = self
             .conn
             .prepare("UPDATE nodes SET quadkey = ? WHERE id = ?")?;
+        let mut count = 0;
         for res in nodes_iter? {
             if let Ok((id, quadkey)) = res {
+                //debug!("Fix node {:?} with quadkey {:?}", id, quadkey.to_string());
+                count += 1;
                 stmt2.execute(params![quadkey.to_string(), id])?;
+            } else {
+                error!("Cannot fix quadkey: {:?}", res);
             }
         }
+        info!("Fixed {:?} quadkeys", count);
         Ok(())
     }
 
@@ -170,12 +176,17 @@ impl Database {
         let objs = pbf.get_objs_and_deps(|x| self.filter_object(x))?;
 
         info!("Updating database with {:?} objects...", objs.len());
+        let mut count = 0;
         for (_, obj) in &objs {
             match obj {
                 OsmObj::Node(node) => self.update_node(node)?,
                 OsmObj::Way(way) => self.update_way(way)?,
                 _ => (),
             }
+            if count % 10000 == 0 {
+                info!("Updated {:?} objects so far", count);
+            }
+            count += 1;
         }
 
         Ok(())
