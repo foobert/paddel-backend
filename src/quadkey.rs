@@ -41,3 +41,13 @@ impl Quadkey {
         return (xtile, ytile);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_foo() {
+        assert_eq!(Quadkey::new(0.0, 0.0, 4).to_string(), &"3000".to_string());
+    }
+}
