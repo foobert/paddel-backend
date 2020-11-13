@@ -23,13 +23,15 @@ pub async fn serve(database: Database) -> () {
     let dbpool = Arc::new(Mutex::new(database));
     let env = warp::any().map(move || dbpool.clone());
 
+    let cors = warp::cors().allow_any_origin().allow_methods(vec!["GET"]);
+
     let route = warp::get()
         .and(warp::path("route"))
         .and(warp::query::<QueryParams>())
         .and(env.clone())
         .and_then(route);
 
-    let routes = route.recover(handle_rejection);
+    let routes = route.recover(handle_rejection).with(cors);
 
     let server = warp::serve(routes);
     let s = server.run(([127, 0, 0, 1], 8081));
