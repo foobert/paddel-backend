@@ -229,8 +229,15 @@ impl Database {
             dist_a.cmp(&dist_b)
         });
         debug!("min node: {:?}", min_node);
+        if min_node.is_some() {
+            let m = min_node.unwrap();
+            debug!("distance: {:?}", distance_between(&m, &goal));
+            return Ok(m);
+        } else {
+            return Err(anyhow!("No node near {:?} {:?}", lat, lon));
+        }
 
-        return min_node.ok_or(anyhow!("No node near {:?} {:?}", lat, lon));
+        //return min_node.ok_or(anyhow!("No node near {:?} {:?}", lat, lon));
     }
 
     pub fn neighbours(&self, node: &RouteNode) -> Vec<(RouteNode, i32)> {
