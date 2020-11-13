@@ -50,6 +50,8 @@ struct ErrorMessage {
 struct RouteResult {
     linestring: Vec<(f64, f64)>,
     distance: i32,
+    start: (f64, f64),
+    goal: (f64, f64),
 }
 
 #[derive(Debug)]
@@ -102,13 +104,24 @@ async fn route(
     );
 
     if let Some((nodes, distance)) = result {
+        info!("Found a route!");
         let linestring: Vec<(f64, f64)> = nodes.iter().map(|n| (n.lon, n.lat)).collect();
         let json = warp::reply::json(&RouteResult {
             linestring: linestring,
             distance: distance,
+            start: (start.lon, start.lat),
+            goal: (goal.lon, goal.lat),
         });
         Ok(warp::reply::with_status(json, StatusCode::OK))
     } else {
-        return Err(reject());
+        info!("Found no route");
+        let json = warp::reply::json(&RouteResult {
+            linestring: vec![],
+            distance: 0,
+            start: (start.lon, start.lat),
+            goal: (goal.lon, goal.lat),
+        });
+        Ok(warp::reply::with_status(json, StatusCode::OK))
+        //return Err(reject());
     }
 }
