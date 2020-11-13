@@ -203,15 +203,20 @@ impl Database {
         debug!("Quadkey: {:?}", quadkey);
         let mut stmt = self
             .conn
-            .prepare("SELECT id, lat, lon FROM nodes WHERE substr(quadkey, 1, ?) = ?")?;
+            //.prepare("SELECT id, lat, lon FROM nodes WHERE substr(quadkey, 1, ?) = ?")?;
+            .prepare("SELECT id, lat, lon FROM nodes WHERE lat >= ? AND lat <= ? AND lon >= ? AND lon <= ?")?;
         let nodes_iter = stmt
-            .query_map(params![12, quadkey.to_string()], |row| {
-                Ok(RouteNode {
-                    id: row.get(0)?,
-                    lat: row.get(1)?,
-                    lon: row.get(2)?,
-                })
-            })?
+            //.query_map(params![12, quadkey.to_string()], |row| {
+            .query_map(
+                params![lat - 0.01, lat + 0.01, lon - 0.01, lon + 0.01],
+                |row| {
+                    Ok(RouteNode {
+                        id: row.get(0)?,
+                        lat: row.get(1)?,
+                        lon: row.get(2)?,
+                    })
+                },
+            )?
             .map(|n| n.unwrap());
         let goal = RouteNode {
             id: 0,
