@@ -21,21 +21,21 @@ jobs:
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          with:
-            tag_name: ${{ github.ref }}
-            release_name: Release Linux ${{ github.ref }}
-            draft: false
-            prerelease: false
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release Linux ${{ github.ref }}
+          draft: false
+          prerelease: false
       - name: Upload Release Asset
         id: upload-release-asset
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          with:
-            upload_url: ${{ steps.create_release.outputs.upload_url }}
-            asset_path: ./release.zip
-            asset_name: release.zip
-            asset_content_type: application/zip
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./release.zip
+          asset_name: release.zip
+          asset_content_type: application/zip
   build_linux_armv7:
     name: Build Linux ARMv7
     runs-on: ubuntu-latest
